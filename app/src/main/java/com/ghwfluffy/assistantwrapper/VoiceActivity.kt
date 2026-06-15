@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.Typeface
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
@@ -22,8 +24,8 @@ class VoiceActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var statusText: TextView
-    private lateinit var transcriptText: TextView
-    private lateinit var replyText: TextView
+    private lateinit var conversationScroll: ScrollView
+    private lateinit var conversationLog: LinearLayout
     private lateinit var stopButton: Button
     private lateinit var recordButton: Button
     private lateinit var cancelButton: Button
@@ -64,13 +66,13 @@ class VoiceActivity : Activity() {
             textSize = 18f
             text = "Preparing..."
         }
-        transcriptText = TextView(this).apply {
-            textSize = 16f
-            text = ""
+        conversationLog = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 12, 0, 12)
         }
-        replyText = TextView(this).apply {
-            textSize = 16f
-            text = ""
+        conversationScroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(conversationLog)
         }
         stopButton = Button(this).apply {
             text = "Stop recording"
@@ -79,8 +81,6 @@ class VoiceActivity : Activity() {
         recordButton = Button(this).apply {
             text = "Record again"
             setOnClickListener {
-                transcriptText.text = ""
-                replyText.text = ""
                 warmConnection()
                 startRecordingWhenAllowed()
             }
@@ -94,18 +94,16 @@ class VoiceActivity : Activity() {
         root.addView(recordButton)
         root.addView(cancelButton)
         root.addView(TextView(this).apply {
-            text = "Transcript"
+            text = "Conversation"
             textSize = 13f
             gravity = Gravity.START
         })
-        root.addView(transcriptText)
-        root.addView(TextView(this).apply {
-            text = "Agent"
-            textSize = 13f
-            gravity = Gravity.START
-        })
-        root.addView(replyText)
-        setContentView(ScrollView(this).apply { addView(root) })
+        root.addView(conversationScroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f
+        ))
+        setContentView(root)
         updateButtons(recording = false, uploading = false)
     }
 
@@ -170,14 +168,14 @@ class VoiceActivity : Activity() {
             file.delete()
             mainHandler.post {
                 result.onSuccess { prompt ->
-                    transcriptText.text = prompt.transcript
-                    replyText.text = prompt.responseText.ifBlank { prompt.failureMessage ?: "No response text returned." }
-                    chatTurns += "You: ${prompt.transcript}"
-                    chatTurns += "Agent: ${replyText.text}"
+                    val reply = prompt.responseText.ifBlank { prompt.failureMessage ?: "No response text returned." }
+                    addConversationTurn("You", prompt.transcript)
+                    addConversationTurn("Agent", reply)
                     setStatus("Ready")
                     updateButtons(recording = false, uploading = false)
                 }.onFailure { error ->
                     val message = error.message ?: "Voice request failed."
+                    addConversationTurn("System", message, includeInContext = false)
                     setStatus(message)
                     updateButtons(recording = false, uploading = false)
                     if (!warmSession || message.contains("HTTP 401")) {
@@ -210,6 +208,41 @@ class VoiceActivity : Activity() {
 
     private fun recentContext(): String {
         return chatTurns.takeLast(8).joinToString("\n")
+    }
+
+    private fun addConversationTurn(speaker: String, body: CharSequence, includeInContext: Boolean = true) {
+        val group = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8, 0, 10)
+        }
+        val label = TextView(this).apply {
+            text = speaker
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(31, 41, 55))
+        }
+        val message = TextView(this).apply {
+            text = body
+            textSize = 16f
+            setTextColor(Color.rgb(17, 24, 39))
+            setTextIsSelectable(true)
+        }
+        group.addView(label)
+        group.addView(message)
+        conversationLog.addView(group, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        if (includeInContext) {
+            chatTurns += "$speaker: $body"
+        }
+        scrollConversationToBottom()
+    }
+
+    private fun scrollConversationToBottom() {
+        conversationScroll.post {
+            conversationScroll.fullScroll(View.FOCUS_DOWN)
+        }
     }
 
     private fun updateButtons(recording: Boolean, uploading: Boolean) {
