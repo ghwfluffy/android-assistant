@@ -168,7 +168,7 @@ class VoiceActivity : Activity() {
             file.delete()
             mainHandler.post {
                 result.onSuccess { prompt ->
-                    val reply = prompt.responseText.ifBlank { prompt.failureMessage ?: "No response text returned." }
+                    val reply = prompt.displayText()
                     addConversationTurn("You", prompt.transcript)
                     addConversationTurn("Agent", reply)
                     setStatus("Ready")

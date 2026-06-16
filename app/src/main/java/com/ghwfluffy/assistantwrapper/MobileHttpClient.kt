@@ -11,11 +11,29 @@ import java.util.concurrent.TimeUnit
 
 data class VoicePromptResult(
     val transcript: String,
-    val responseText: String,
+    val responseText: String?,
     val runId: String?,
     val status: String?,
+    val selectedAction: String?,
+    val toolStatus: String?,
     val failureMessage: String?
-)
+) {
+    fun displayText(): String {
+        if (!failureMessage.isNullOrBlank()) {
+            return "I could not complete that: $failureMessage"
+        }
+        if (!responseText.isNullOrBlank()) {
+            return responseText
+        }
+        if (!selectedAction.isNullOrBlank() && status == "completed") {
+            return "Done. I completed ${selectedAction.replace('_', ' ')}."
+        }
+        if (!status.isNullOrBlank()) {
+            return "The voice request finished with status $status."
+        }
+        return "No response text returned."
+    }
+}
 
 object MobileHttpClient {
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -63,11 +81,13 @@ object MobileHttpClient {
             }
             val json = JSONObject(text)
             return VoicePromptResult(
-                transcript = json.optString("transcript"),
-                responseText = json.optString("responseText"),
-                runId = json.optString("runId").takeIf { it.isNotBlank() },
-                status = json.optString("status").takeIf { it.isNotBlank() },
-                failureMessage = json.optString("failureMessage").takeIf { it.isNotBlank() }
+                transcript = json.cleanString("transcript") ?: "",
+                responseText = json.cleanString("responseText"),
+                runId = json.cleanString("runId"),
+                status = json.cleanString("status"),
+                selectedAction = json.cleanString("selectedAction"),
+                toolStatus = json.cleanString("toolStatus"),
+                failureMessage = json.cleanString("failureMessage")
             )
         }
     }
@@ -90,3 +110,11 @@ object MobileHttpClient {
     }
 }
 
+private fun JSONObject.cleanString(name: String): String? {
+    if (!has(name) || isNull(name)) {
+        return null
+    }
+    return optString(name)
+        .trim()
+        .takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+}
