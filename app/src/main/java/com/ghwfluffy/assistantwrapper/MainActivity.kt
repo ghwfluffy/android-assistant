@@ -36,6 +36,28 @@ class MainActivity : Activity() {
         webView.loadUrl(MobileConfig.urlForPath(startPathFromIntent(intent)))
     }
 
+    override fun onPause() {
+        CookieManager.getInstance().flush()
+        webView.onPause()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView.onResume()
+    }
+
+    override fun onStop() {
+        CookieManager.getInstance().flush()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        CookieManager.getInstance().flush()
+        webView.destroy()
+        super.onDestroy()
+    }
+
     override fun onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack()
@@ -73,6 +95,10 @@ class MainActivity : Activity() {
                 startActivity(Intent(Intent.ACTION_VIEW, request.url))
                 return true
             }
+
+            override fun onPageFinished(view: WebView, url: String) {
+                CookieManager.getInstance().flush()
+            }
         }
         view.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
@@ -101,4 +127,3 @@ class MainActivity : Activity() {
         private const val FILE_CHOOSER_REQUEST = 1001
     }
 }
-
